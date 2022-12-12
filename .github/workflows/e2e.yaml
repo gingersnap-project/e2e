@@ -1,0 +1,137 @@
+name: E2E
+
+on:
+  workflow_call:
+    inputs:
+      cache-manager-ref:
+        type: string
+        default: main
+      cache-manager-repository:
+        type: string
+        default: gingersnap-project/cache-manager
+      db-syncer-ref:
+        type: string
+        default: main
+      db-syncer-repository:
+        type: string
+        default: gingersnap-project/db-syncer
+
+jobs:
+
+  cache-manager-images:
+    uses: ryanemerson/cache-manager/.github/workflows/build-images.yaml@e2e
+    if: ${{ inputs.cache-manager-ref != 'main' || inputs.cache-manager-repository != 'gingersnap-project/cache-manager' }}
+    with:
+      ref: ${{ inputs.cache-manager-ref }}
+      repository: ${{ inputs.cache-manager-repository }}
+
+  db-syncer-image:
+    uses: ryanemerson/db-syncer/.github/workflows/build-image.yaml@e2e
+    if: ${{ inputs.db-syncer-ref != 'main' || inputs.db-syncer-repository != 'gingersnap-project/db-syncer' }}
+    with:
+      ref: ${{ inputs.db-syncer-ref }}
+      repository: ${{ inputs.db-syncer-repository }}
+
+  e2e:
+    needs: [cache-manager-images, db-syncer-image]
+    if: ${{ always() && !(contains(needs.*.result, 'failure')) }}
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Checkout Test Code
+      uses: actions/checkout@v3
+      with:
+        repository: ryanemerson/gingersnap-test
+        path: test
+
+    - name: Checkout Operator PR Branch
+      if: ${{ contains(github.repository, 'operator') }}
+      uses: actions/checkout@v3
+      with:
+        ref: ${{ github.ref }}
+        path: operator
+
+    - name: Checkout Operator Main Branch
+      if: ${{ !contains(github.repository, 'operator') }}
+      uses: actions/checkout@v3
+      with:
+        repository: gingersnap-project/operator
+        path: operator
+
+    - name: Install Kind
+      run: go install sigs.k8s.io/kind@v0.14.0
+
+    - name: Create Kind Cluster
+      run: |
+        cd operator
+        make oc operator-sdk
+        echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+        ./hack/kind.sh
+
+    - name: Download Component Images
+      uses: actions/download-artifact@v3
+
+    - name: Load cache-manager Images
+      if: ${{ needs.cache-manager-images.outputs.image-names }}
+      run: |
+        for i in ${{ needs.cache-manager-images.outputs.image-names }}; do \
+          docker load --input $i/$i.tar; \
+          kind load docker-image quay.io/gingersnap/cache-manager-$i:${{ needs.cache-manager-images.outputs.image-tag }}; \
+        done
+
+    - name: Load db-syncer Images
+      if: ${{ needs.db-syncer-image.outputs.image-name }}
+      run: |
+        docker load --input ${{ needs.db-syncer-image.outputs.image-name }}/${{ needs.db-syncer-image.outputs.image-name }}.tar
+        kind load docker-image quay.io/gingersnap/db-syncer
+
+    - name: Build and Deploy Operator with OLM
+      run: |
+        cd operator
+        make catalog-source catalog-install
+        ./hack/create-subscription.sh
+        # First check deployment exists to prevent wait returning not found error
+        i=1;until kubectl -n olm get deployment/gingersnap-operator-controller-manager || (( $i == 60 )) ; do ((i=i+1)); sleep 10; done
+        kubectl -n operators wait --timeout=60s --for=condition=available deployment/gingersnap-operator-controller-manager
+
+    - name: Build and push Test Image to local cluster
+      uses: docker/build-push-action@v3
+      with:
+        context: ./test
+        file: test/src/test/docker/Dockerfile.jvm
+        push: true
+        tags: localhost:5000/test
+
+    - name: Execute Tests
+      run: |
+        kubectl create ns test-runner
+        kubectl kustomize test/deploy/test | kubectl -n test-runner apply -f -
+        # TODO implement a smarter way to ensure that resources are created before wait
+        sleep 60
+        kubectl -n test-runner wait --for=condition=complete --timeout=600s job/test
+
+    - name: Retrieve Test Results
+      if: success() || failure()
+      run: |
+        mkdir results
+        kubectl kustomize test/deploy/reader | kubectl -n test-runner apply -f -
+        kubectl -n test-runner wait --for=condition=ready pod/report-reader
+        kubectl -n test-runner cp report-reader:/test-output results
+
+    - name: Inspect Cluster
+      if: failure()
+      run: oc adm inspect ns
+
+    - name: Upload Inspect Artifacts
+      uses: actions/upload-artifact@v3
+      if: failure()
+      with:
+        name: oc-inspect
+        path: inspect.*
+
+    - name: Upload Test Logs
+      uses: actions/upload-artifact@v3
+      if: success() || failure()
+      with:
+        name: test-results
+        path: "results/TEST-*.xml"

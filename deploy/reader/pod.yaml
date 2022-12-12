@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: report-reader
+spec:
+  containers:
+    - name: sleep
+      image: localhost:5000/test
+      command:
+        - "/bin/bash"
+        - "-c"
+        - "sleep infinity"
+      volumeMounts:
+        - name: reports
+          mountPath: /test-output
+  restartPolicy: Never
+  volumes:
+    - name: reports
+      persistentVolumeClaim:
+        claimName: surefire-reports

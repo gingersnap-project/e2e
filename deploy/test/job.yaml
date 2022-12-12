@@ -1,0 +1,25 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test
+  namespace: test-runner
+spec:
+  template:
+    spec:
+      serviceAccountName: test
+      containers:
+        - name: test
+          image: localhost:5000/test
+          command:
+            - mvn
+            - test
+            - -Dgroups=mysql
+          volumeMounts:
+            - name: reports
+              mountPath: /deployments/test-output
+      restartPolicy: Never
+      volumes:
+        - name: reports
+          persistentVolumeClaim:
+            claimName: surefire-reports
+  backoffLimit: 1
