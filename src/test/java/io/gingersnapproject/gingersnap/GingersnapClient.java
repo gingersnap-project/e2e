@@ -43,8 +43,7 @@ public class GingersnapClient {
                 .build();
         try {
             var rsp = client.send(req, HttpResponse.BodyHandlers.ofString());
-            // TODO remove 204
-            assertThat(rsp.statusCode(), anyOf(is(200), is(204), is(404)));
+            assertThat(rsp.statusCode(), anyOf(is(200), is(404)));
             return rsp.body();
         } catch (InterruptedException | IOException e) {
             throw new RuntimeException(e);
@@ -63,8 +62,7 @@ public class GingersnapClient {
                 .build();
         try {
             var rsp = client.send(req, HttpResponse.BodyHandlers.ofLines());
-            // TODO remove 204
-            assertThat(rsp.statusCode(), anyOf(is(200), is(204), is(404)));
+            assertThat(rsp.statusCode(), anyOf(is(200), is(404)));
             return rsp.body();
         } catch (InterruptedException | IOException e) {
             throw new RuntimeException(e);

@@ -77,7 +77,6 @@ public class AbstractEagerCacheTest extends AbstractTest {
                         .getResultList(),
                 is(empty())
         );
-        // TODO update to null when 404 returned?
         eventually(() -> gingersnap.get(ruleName, "1").isEmpty());
 
         // Add entry to the DB and wait for it to appear in the Cache
@@ -91,7 +90,6 @@ public class AbstractEagerCacheTest extends AbstractTest {
         assertThat(dbCustomer, notNullValue());
 
         var key = Long.toString(dbCustomer.getId());
-        // TODO update to null when 404 returned?
         eventually(() -> !"".equals(gingersnap.get(ruleName, key)));
 
         var c = gingersnap.get(ruleName, key, Customer.class);
