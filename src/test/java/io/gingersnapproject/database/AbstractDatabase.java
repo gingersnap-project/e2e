@@ -45,20 +45,6 @@ abstract class AbstractDatabase implements AfterAllCallback, AfterEachCallback, 
         this.vendor = vendor;
     }
 
-    protected InputStream resourceStream(String name) {
-        return AbstractDatabase.class.getResourceAsStream(String.format("/kubernetes/database/%s/%s", vendor, name));
-    }
-
-    protected String resource(String name) {
-        try {
-            var resource = String.format("/kubernetes/database/%s/%s", vendor, name);
-            var path = Paths.get(AbstractDatabase.class.getResource(resource).toURI());
-            return Files.readString(path);
-        } catch (Throwable t) {
-            throw new RuntimeException(t);
-        }
-    }
-
     @Override
     public void beforeAll(ExtensionContext context) {
         waitForNamespaceDeletion(k8s, namespace);
@@ -143,6 +129,9 @@ abstract class AbstractDatabase implements AfterAllCallback, AfterEachCallback, 
                 .inNamespace(namespace)
                 .withName(podList.getItems().get(0).getMetadata().getName())
                 .waitUntilCondition(pod -> pod.getStatus().getPhase().equals("Succeeded"), 4, TimeUnit.MINUTES);
+
+        emf = Persistence.createEntityManagerFactory(String.format("io.gingersnapproject.%s.%s", vendor, Util.LOCAL_TEST_EXECUTION ? "local" : "deployed"));
+        em = emf.createEntityManager();
     }
 
     public record DBInitializer(String image, List<String> commands, Set<String> scripts) {
@@ -154,12 +143,16 @@ abstract class AbstractDatabase implements AfterAllCallback, AfterEachCallback, 
 
     @Override
     public void beforeEach(ExtensionContext context) {
-        // Create a new EntityManager before tests to ensure that data is dropped from tables between tests
-        // Requires hibernate.hbm2ddl.auto="create-drop" in the persistence unit definition
-        emf = Persistence.createEntityManagerFactory(String.format("io.gingersnapproject.%s.%s", vendor, Util.LOCAL_TEST_EXECUTION ? "local" : "deployed"));
-        em = emf.createEntityManager();
+        // Reset tables
+        EntityTransaction tx = em.getTransaction();
+        tx.begin();
+        em.createQuery("DELETE FROM customer").executeUpdate();
+        tx.commit();
 
-        // Ensure that populate.sql has been executed and entries added to DB
+        // Populate tables
+        insert(new Customer("Alice", "alice@example.com"));
+
+        // Ensure that expected number of entries have been added to the table(s)
         assertThat(
                 query("FROM customer c WHERE c.id = ?1", Customer.class)
                         .setParameter(1, 1L)
@@ -170,13 +163,13 @@ abstract class AbstractDatabase implements AfterAllCallback, AfterEachCallback, 
 
     @Override
     public void afterEach(ExtensionContext context) throws Exception {
-        if (em != null) em.close();
-        if (emf != null) emf.close();
         if (forwardedPort != null) forwardedPort.close();
     }
 
     @Override
     public void afterAll(ExtensionContext context) {
+        if (em != null) em.close();
+        if (emf != null) emf.close();
         k8s.namespaces().withName(namespace).delete();
     }
 
@@ -238,5 +231,19 @@ abstract class AbstractDatabase implements AfterAllCallback, AfterEachCallback, 
     @Override
     public <T> TypedQuery<T> query(String query, Class<T> resultClass) {
         return em.createQuery(query, resultClass);
+    }
+
+    protected InputStream resourceStream(String name) {
+        return AbstractDatabase.class.getResourceAsStream(String.format("/kubernetes/database/%s/%s", vendor, name));
+    }
+
+    protected String resource(String name) {
+        try {
+            var resource = String.format("/kubernetes/database/%s/%s", vendor, name);
+            var path = Paths.get(AbstractDatabase.class.getResource(resource).toURI());
+            return Files.readString(path);
+        } catch (Throwable t) {
+            throw new RuntimeException(t);
+        }
     }
 }

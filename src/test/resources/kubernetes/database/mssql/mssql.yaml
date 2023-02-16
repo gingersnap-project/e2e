@@ -26,6 +26,8 @@ spec:
       labels:
         app.kubernetes.io/name: mssql
     spec:
+      # Hostname must be < 15 characters or the sqlagent will fail to start
+      hostname: mssql
       containers:
         - name: server
           image: mcr.microsoft.com/mssql/server:2019-latest
@@ -36,3 +38,5 @@ spec:
               value: "y"
             - name: SA_PASSWORD
               value: Password!42
+            - name: MSSQL_AGENT_ENABLED
+              value: "true"

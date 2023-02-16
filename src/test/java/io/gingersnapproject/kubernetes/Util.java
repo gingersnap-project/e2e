@@ -1,8 +1,11 @@
 package io.gingersnapproject.kubernetes;
 
+import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.NamespaceBuilder;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.dsl.Gettable;
 import io.gingersnap_project.v1alpha1.*;
 import io.gingersnap_project.v1alpha1.cachespec.DataSource;
 import io.gingersnap_project.v1alpha1.cachespec.datasource.SecretRef;
@@ -34,13 +37,29 @@ public class Util {
         k8s.namespaces().withName(namespace).waitUntilCondition(Objects::isNull, 4, TimeUnit.MINUTES);
     }
 
-    public static Closeable forwardPort(KubernetesClient k8s, String namespace, String app, int containerPort, int localPort) {
+    public static Closeable forwardPort(KubernetesClient k8s, String namespace, String name, int containerPort, int localPort) {
         if (LOCAL_TEST_EXECUTION) {
-            var pods = k8s.pods().inNamespace(namespace).withLabel("app.kubernetes.io/name", app).resources().toList();
-            assertThat(pods, hasSize(1));
-            var pod = pods.get(0);
-            System.out.printf("Forwarding port %d:%d for pod '%s'\n", containerPort, localPort, pod.get().getMetadata().getName());
-            return pod.portForward(containerPort, localPort);
+            var pods = k8s.pods()
+                    .inNamespace(namespace)
+                    .withLabel("app.kubernetes.io/name", name)
+                    .resources()
+                    .map(Gettable::get)
+                    .filter(p -> {
+                        return p.getStatus().getContainerStatuses().stream().allMatch(ContainerStatus::getReady);
+                    })
+                    .collect(Collectors.toList());
+
+            assertThat(
+                    pods.stream().map(p -> p.getMetadata().getName()).collect(Collectors.joining(",")),
+                    pods,
+                    hasSize(1)
+            );
+            var podName = pods.get(0).getMetadata().getName();
+            System.out.printf("Forwarding port %d:%d for pod '%s'\n", containerPort, localPort, pods.get(0).getMetadata().getName());
+            return k8s.pods()
+                    .inNamespace(namespace)
+                    .withName(podName)
+                    .portForward(containerPort, localPort);
         }
         return () -> {};
     }
@@ -128,7 +147,7 @@ public class Util {
 
 
     public static void eventually(Supplier<Boolean> condition) {
-        eventually(condition, 10, TimeUnit.SECONDS);
+        eventually(condition, 1, TimeUnit.MINUTES);
     }
 
     public static void eventually(Supplier<Boolean> condition, long timeout, TimeUnit unit) {

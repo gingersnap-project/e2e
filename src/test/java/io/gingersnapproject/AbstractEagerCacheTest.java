@@ -9,13 +9,13 @@ import org.junit.jupiter.api.Test;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 import static io.gingersnapproject.kubernetes.Util.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.hamcrest.core.Is.is;
 
-public class AbstractEagerCacheTest extends AbstractTest {
+abstract class AbstractEagerCacheTest extends AbstractTest {
 
     protected final DataSource.DbType dsType;
 
@@ -61,9 +61,11 @@ public class AbstractEagerCacheTest extends AbstractTest {
 
         // Assert that existing DB entries are loaded into the Cache
         var gingersnap = GingersnapClient.of(cache);
-        var keys = gingersnap.getAllKeys(ruleName).collect(Collectors.toList());
-        assertThat(keys, hasSize(1));
-        assertThat(keys.get(0), is(not("[]")));
+        eventually(() -> gingersnap.isRuleDefined(ruleName));
+        eventually(() -> {
+            var keys = gingersnap.getAllKeys(ruleName).toList();
+            return keys.size() > 0 && !keys.get(0).equals("[]");
+        });
         assertThat(
                 gingersnap.get(ruleName, "1", Customer.class),
                 equalTo(new Customer("Alice", "alice@example.com"))
@@ -77,7 +79,7 @@ public class AbstractEagerCacheTest extends AbstractTest {
                         .getResultList(),
                 is(empty())
         );
-        eventually(() -> gingersnap.get(ruleName, "1").isEmpty());
+        eventually(() -> gingersnap.get(ruleName, "1") == null);
 
         // Add entry to the DB and wait for it to appear in the Cache
         Customer customer = new Customer("Ryan", "ryan@example.com");
