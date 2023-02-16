@@ -9,6 +9,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 @ExtendWith(MySQL.class)
 public class MySQLLazyCacheTest extends AbstractLazyCacheTest {
     public MySQLLazyCacheTest() {
-        super(DataSource.DbType.MYSQL_8, MySQL.PLACEHOLDER);
+        super(DataSource.DbType.MYSQL_8);
     }
 }

@@ -3,9 +3,10 @@ package io.gingersnapproject.database;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class MSSQL extends AbstractDatabase {
-    public static final String PLACEHOLDER = "@P1";
 
     public MSSQL() {
         super("mssql", 1433);
@@ -22,6 +23,18 @@ public class MSSQL extends AbstractDatabase {
 
     @Override
     protected void connectionProperties(Map<String, String> props) {
-        props.put("username", "sa");
+        props.put("username", "gingersnap_login");
+    }
+
+    @Override
+    public String select(Set<String> valueColumns, String table, List<String> whereColumns) {
+        return "SELECT " +
+                String.join(", ", valueColumns) +
+                " FROM " +
+                table +
+                " WHERE " +
+                IntStream.range(0, whereColumns.size())
+                        .mapToObj(index -> String.format("%s = @P%d", whereColumns.get(index), index + 1))
+                        .collect(Collectors.joining(" AND "));
     }
 }

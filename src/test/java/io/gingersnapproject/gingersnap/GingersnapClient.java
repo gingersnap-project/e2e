@@ -43,8 +43,9 @@ public class GingersnapClient {
                 .build();
         try {
             var rsp = client.send(req, HttpResponse.BodyHandlers.ofString());
-            assertThat(rsp.statusCode(), anyOf(is(200), is(404)));
-            return rsp.body();
+            var code = rsp.statusCode();
+            assertThat(code, anyOf(is(200), is(404)));
+            return code == 200 ? rsp.body() : null;
         } catch (InterruptedException | IOException e) {
             throw new RuntimeException(e);
         }
@@ -56,17 +57,26 @@ public class GingersnapClient {
     }
 
     public Stream<String> getAllKeys(String rule) {
+        var rsp = getAllKeysRsp(rule);
+        assertThat(rsp.statusCode(), is(200));
+        return rsp.body();
+    }
+
+    public HttpResponse<Stream<String>> getAllKeysRsp(String rule) {
         var path = String.format("/rules/%s", rule);
         var req = HttpRequest.newBuilder()
                 .uri(uri.resolve(path))
                 .build();
+
         try {
-            var rsp = client.send(req, HttpResponse.BodyHandlers.ofLines());
-            assertThat(rsp.statusCode(), anyOf(is(200), is(404)));
-            return rsp.body();
+            return client.send(req, HttpResponse.BodyHandlers.ofLines());
         } catch (InterruptedException | IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public boolean isRuleDefined(String name) {
+        return getAllKeysRsp(name).statusCode() == 200;
     }
 
     private <T> T fromJson(String json, Class<T> entity) {

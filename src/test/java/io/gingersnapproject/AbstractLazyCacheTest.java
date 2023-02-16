@@ -8,26 +8,23 @@ import io.gingersnapproject.kubernetes.KubernetesClientResolver;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static io.gingersnapproject.kubernetes.Util.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.hamcrest.core.Is.is;
 
 @ExtendWith(KubernetesClientResolver.class)
 abstract class AbstractLazyCacheTest extends AbstractTest {
 
     protected final DataSource.DbType dsType;
-    protected final String sqlPlaceholder;
 
-    public AbstractLazyCacheTest(DataSource.DbType dsType, String sqlPlaceholder) {
+    public AbstractLazyCacheTest(DataSource.DbType dsType) {
         this.dsType = dsType;
-        this.sqlPlaceholder = sqlPlaceholder;
-    }
-
-    protected String sql(String query) {
-        return query.replace("?", sqlPlaceholder);
     }
 
     @Test
@@ -48,7 +45,7 @@ abstract class AbstractLazyCacheTest extends AbstractTest {
                         lazyCacheRule(
                                 ruleName,
                                 cache,
-                                sql("SELECT fullname, email FROM customer WHERE id = ?")
+                                db.select(Set.of("fullname", "email"), "gingersnap.customer", List.of("id"))
                         )
                 )
                 .inNamespace(namespace)
@@ -68,6 +65,8 @@ abstract class AbstractLazyCacheTest extends AbstractTest {
 
         // Assert that entry is loaded into the Cache
         var gingersnap = GingersnapClient.of(cache);
+        eventually(() -> gingersnap.isRuleDefined(ruleName));
+
         var keys = gingersnap.getAllKeys(ruleName).collect(Collectors.toList());
         assertThat(keys, hasSize(1));
         assertThat(keys.get(0), is("[]"));

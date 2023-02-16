@@ -9,6 +9,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 @ExtendWith(MSSQL.class)
 public class MSSQLLazyCacheTest extends AbstractLazyCacheTest {
     public MSSQLLazyCacheTest() {
-        super(DataSource.DbType.SQL_SERVER_2019, MSSQL.PLACEHOLDER);
+        super(DataSource.DbType.SQL_SERVER_2019);
     }
 }

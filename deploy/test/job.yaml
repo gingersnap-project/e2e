@@ -13,7 +13,6 @@ spec:
           command:
             - mvn
             - test
-            - -Dgroups=mysql
           volumeMounts:
             - name: reports
               mountPath: /deployments/test-output
