@@ -15,6 +15,12 @@ on:
       db-syncer-repository:
         type: string
         default: gingersnap-project/db-syncer
+      e2e-ref:
+        type: string
+        default: main
+      e2e-repository:
+        type: string
+        default: gingersnap-project/e2e
 
 jobs:
 
@@ -41,7 +47,8 @@ jobs:
     - name: Checkout Test Code
       uses: actions/checkout@v3
       with:
-        repository: ryanemerson/gingersnap-test
+        ref: ${{ inputs.e2e-ref }}
+        repository: ${{ inputs.e2e-repository }}
         path: test
 
     - name: Checkout Operator PR Branch
