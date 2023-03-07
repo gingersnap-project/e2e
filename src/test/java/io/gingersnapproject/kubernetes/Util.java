@@ -31,6 +31,7 @@ public class Util {
     public static final boolean LOCAL_TEST_EXECUTION = System.getenv("KUBERNETES_SERVICE_HOST") == null;
 
     private Util() {
+        System.out.println("LOCAL_TEST_EXECUTION=%s" + LOCAL_TEST_EXECUTION);
     }
 
     public static void waitForNamespaceDeletion(KubernetesClient k8s, String namespace) {
